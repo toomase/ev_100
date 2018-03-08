@@ -1,0 +1,497 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r setup}
+library(magick)
+library(paletter)
+library(httr)
+library(tidyverse)
+library(rvest)
+library(FNN)
+```
+
+
+Galeriid (kõigi piltide url-d) ERR-st ja Õhtulehest Presidendi vastuvõttude kohta perioodil 2013-2018
+
+```{r galerii_2013}
+galerii_html_2013 <- read_lines("https://www.ohtuleht.ee/511409/aasta-koige-komulisem-galerii-kleidiparaad-vaata-mida-vastuvotul-kanti")
+
+pildid_url_2013 <- galerii_html_2013 %>% 
+  str_extract('https://p.ocdn.ee/40/i/000220/.+\\.jpg') %>% 
+  as_tibble() %>% 
+  rename(url = value) %>% 
+  filter(!is.na(url)) %>% 
+  mutate(url = str_replace(url, 'href="', ""),
+         aasta = 2013)
+```
+
+
+```{r galerii_2014}
+galerii_html_2014 <- read_lines("https://www.ohtuleht.ee/565573/vaata-2014-aasta-presidendi-vastuvotule-tulijaid")
+
+pildid_url_2014 <- galerii_html_2014 %>% 
+  str_extract('https://p.ocdn.ee/40/i/2014/2/24/.+\\.jpg') %>% 
+  as_tibble() %>% 
+  rename(url = value) %>% 
+  filter(!is.na(url)) %>% 
+  mutate(url = str_replace(url, 'href="', ""),
+         aasta = 2014)
+```
+
+
+```{r galerii_2015}
+galerii_html_2015 <- read_lines("https://menu.err.ee/283603/galerii-eesti-vabariigi-97-aastapaeva-kaunid-peokulalised#lg=1&slide=0")
+
+pildid_url_2015 <- galerii_html_2015 %>% 
+  str_extract('href=\"https://s.err.ee/photo/crop/2015/02/25/.+\\.jpg') %>% 
+  as_tibble() %>% 
+  rename(url = value) %>% 
+  filter(!is.na(url)) %>% 
+  mutate(url = str_replace(url, 'href="', ""),
+         aasta = 2015)
+```
+
+```{r galerii_2016}
+galerii_html_2016 <- read_lines("https://menu.err.ee/289493/galerii-presidendi-vastuvotu-kulalised#lg=1&slide=0")
+
+pildid_url_2016 <- galerii_html_2016 %>% 
+  str_extract('href=\"https://s.err.ee/photo/crop/2016/02/25/.+\\.jpg') %>% 
+  as_tibble() %>% 
+  rename(url = value) %>% 
+  filter(!is.na(url)) %>% 
+  mutate(url = str_replace(url, 'href="', ""),
+         aasta = 2016)
+```
+
+
+```{r galerii_2017}
+galerii_html_2015 <- read_lines("https://menu.err.ee/294513/galerii-presidendi-vastuvotu-kulalised#lg=1&slide=0")
+
+pildid_url_2017 <- galerii_html_2017 %>% 
+  str_extract('href=\"https://s.err.ee/photo/crop/2017/02/24/.+\\.jpg') %>% 
+  as_tibble() %>% 
+  rename(url = value) %>% 
+  filter(!is.na(url)) %>% 
+  mutate(url = str_replace(url, 'href="', ""),
+         aasta = 2017)
+```
+
+```{r galerii_2018}
+galerii_html_2018 <- read_lines("https://menu.err.ee/685663/galerii-presidendi-vastuvotu-kulalised-erm-i-fotoseina-ees#lg=1&slide=15")
+
+pildid_url_2018 <- galerii_html_2018 %>% 
+  str_extract('href=\"https://s.err.ee/photo/crop/2018/02/25/.+\\.jpg') %>% 
+  as_tibble() %>% 
+  rename(url = value) %>% 
+  filter(!is.na(url)) %>% 
+  mutate(url = str_replace(url, 'href="', ""),
+         aasta = 2018)
+```
+
+Kairos Face API credentials. Selle abil tuvastan piltidelt vajalikud atribuudid.
+```{r}
+source("kairos_api_credentials.R")
+```
+
+Funktsioon, mis saadab Kairos API-le pildi kohta päringu ja tagastab andmetega data frame.
+Piiranguks on max 25 päringut minutis ja 1500 päevas. Seetõttu on pandud pärast igat päringut paus 6 sek.
+```{r}
+naotuvastus <- function(url){
+  query <- str_c('{"image": "', url, '"}')
+  
+  api_response <- POST(
+        url = api_endpoint_url,
+        body = query,
+        content_type('application/json'),
+        add_headers(.headers = c("app_id" = api_id,
+                                 "app_key" = api_key)))
+  
+  response_list <- content(api_response)
+  
+  inimesi_pildil <- length(response_list[["images"]][[1]][["faces"]])
+  
+  eralda_elemendid <- function(x){
+    face_id <- response_list[["images"]][[1]][["faces"]][[x]][["face_id"]]
+    confidence <- response_list[["images"]][[1]][["faces"]][[x]][["confidence"]]
+    chin_tip_x <- response_list[["images"]][[1]][["faces"]][[x]][["chinTipX"]]
+    chin_tip_y <- response_list[["images"]][[1]][["faces"]][[x]][["chinTipY"]]
+    age <- response_list[["images"]][[1]][["faces"]][[x]][["attributes"]][["age"]]
+    asian <- response_list[["images"]][[1]][["faces"]][[x]][["attributes"]][["asian"]]
+    black <- response_list[["images"]][[1]][["faces"]][[x]][["attributes"]][["black"]]
+    hispanic <- response_list[["images"]][[1]][["faces"]][[x]][["attributes"]][["hispanic"]]
+    white <- response_list[["images"]][[1]][["faces"]][[x]][["attributes"]][["white"]]
+    lips <- response_list[["images"]][[1]][["faces"]][[x]][["attributes"]][["lips"]]
+    glasses <- response_list[["images"]][[1]][["faces"]][[x]][["attributes"]][["glasses"]]
+    gender_type <- response_list[["images"]][[1]][["faces"]][[x]][["attributes"]][["gender"]][["type"]]
+    gender_female_confidence <- response_list[["images"]][[1]][["faces"]][[x]][["attributes"]][["gender"]][["femaleConfidence"]]
+    gender_male_confidence <- response_list[["images"]][[1]][["faces"]][[x]][["attributes"]][["gender"]][["maleConfidence"]]
+    
+    df <- tibble(face_id, confidence, chin_tip_x, chin_tip_y,
+                 age, asian, black, hispanic, white, lips, glasses,
+                 gender_type, gender_female_confidence, gender_male_confidence)
+    
+    return(df)
+  }
+  
+   # kui tulemust pole, siis NULL väärtus, mitte error
+  eralda_elemendid_possibly <- possibly(eralda_elemendid, NULL)
+  
+  # jooksuta elementide eraldamise funktsioon kõigi nägude kohta
+  inimeste_tunnused_raw <- map_df(seq(1:inimesi_pildil), eralda_elemendid_possibly)
+  
+  inimeste_tunnused <- inimeste_tunnused_raw %>% 
+    mutate(pildi_url = url) %>% 
+    select(pildi_url, everything())
+  
+  return(inimeste_tunnused)
+  Sys.sleep(6)
+}
+
+# kui pildil nägusi ei tuvasta, siis NULL, mitte error
+naotuvastus_possibly <- possibly(naotuvastus, NULL)
+```
+
+Päri 2018 galeriist nägude kohta toorandmed
+```{r}
+system.time(
+naod_2018_raw <- map_df(pildid_url_2018$url, naotuvastus_possibly)
+)
+
+save(naod_2018_raw, file = "data/naod_2018_raw.RData")
+```
+
+Päri kõigi teiste galeriide kohta nägude toorandmed.
+Kuna API piirang on 1500 päringut päevas, sis tuleb see teha osadena.
+```{r}
+naod_2017_raw <- map_df(pildid_url_2017$url, naotuvastus_possibly)
+save(naod_2017_raw, file = "data/naod_2017_raw.RData")
+
+naod_2016_raw <- map_df(pildid_url_2016$url, naotuvastus_possibly)
+save(naod_2016_raw, file = "data/naod_2016_raw.RData")
+
+naod_2015_raw <- map_df(pildid_url_2015$url, naotuvastus_possibly)
+save(naod_2015_raw, file = "data/naod_2015_raw.RData")
+
+naod_2014_raw <- map_df(pildid_url_2014$url, naotuvastus_possibly)
+save(naod_2014_raw, file = "data/naod_2014_raw.RData")
+
+naod_2013_raw <- map_df(pildid_url_2013$url, naotuvastus_possibly)
+save(naod_2013_raw, file = "data/naod_2013_raw.RData")
+```
+
+Ühte tabelisse kokku eri aastate galariide nägude API päringu tulemused ja pildi aasta arv.
+Kuna esimese korraga osad API päringu ebaõnnestusid (liiga lühike paus päringute vahel), siis oli ajutiselt lisatud dataframe "naod_lisa".
+```{r}
+naod_kokku <- bind_rows(naod_2015_raw , naod_2016_raw, naod_2017_raw,
+                        naod_2018_raw, naod_2014_raw, naod_2013_raw, naod_lisa)
+
+pildi_url <- bind_rows(pildid_url_2013, pildid_url_2014, pildid_url_2015,
+                       pildid_url_2016, pildid_url_2017, pildid_url_2018)
+
+pildid_naod_raw <- naod_kokku %>% 
+  left_join(pildi_url, by = c("pildi_url" = "url"))
+
+save(pildid_naod_raw, file = "data/pildid_naod_raw.RData")
+
+glimpse(pildid_naod_raw)
+```
+
+Töötle andmeid:
+  * välista pildid, kus on üle 4 inimese
+```{r}
+pildid_naod <- pildid_naod_raw %>% 
+  group_by(pildi_url) %>% 
+  filter(max(face_id) <= 4) %>% 
+  ungroup() %>% 
+  filter(!is.na(aasta))
+```
+
+
+Seda funktsiooni esialgu ei kasuta
+Funtsioon library paletter põhjal, kus on maha võetud värvide kuvamine graafikul ja teavitused
+https://github.com/AndreaCirilloAC/paletter/blob/master/R/create_palette.R
+```{r create_palette_mod}
+# create_palette_mod <- function(image_path = NA,
+#                            number_of_colors = 40,
+#                            type_of_variable = NA,
+#                            filter_on_low_brightness= TRUE,
+#                            filter_on_high_brightness= TRUE,
+#                            optimize_palette = TRUE,
+#                            filter_on_saturation = TRUE){
+# 
+#   # if (is.na(image_path)){stop("you must provide a jpg image to create your palette from")}
+#   # if (is.na(type_of_variable)){stop("you must specify a valid type_of_variable argument to create the palette")}
+#   # message("decomposing image into RGB...")
+#   painting     <- readJPEG(image_path)
+#   dimension    <- dim(painting)
+#   effective_n_of_color <- number_of_colors*100 #we increase granularity to subsequently optimize the palette
+#   painting_rgb <- data.frame(
+#     x = rep(1:dimension[2], each = dimension[1]),
+#     y = rep(dimension[1]:1, dimension[2]),
+#     R = as.vector(painting[,,1]),
+#     G = as.vector(painting[,,2]),
+#     B = as.vector(painting[,,3])
+#   )
+#   if (optimize_palette == TRUE){
+#   message("applying kmeans to the image...")
+#   k_means        <- kmeans(painting_rgb[,c("R","G","B")], centers = effective_n_of_color, iter.max = 30)
+#   rgb_raw_palette <- k_means$centers
+#   # call to optimize palette
+#   message("optimising palette...")
+#   final_palette <- optimize_palette(rgb_raw_palette,
+#                                     number_of_colors,
+#                                     type_of_variable = type_of_variable,
+#                                     effective_n_of_color,
+#                                     filter_on_low_brightness = filter_on_low_brightness,
+#                                     filter_on_high_brightness = filter_on_high_brightness,
+#                                     filter_on_saturation = filter_on_saturation)
+#   }else{
+#     # message("applying kmeans to the image...")
+#     k_means         <- kmeans(painting_rgb[,c("R","G","B")], centers = number_of_colors, iter.max = 30)
+#     rgb_raw_palette <- k_means$centers
+#     final_palette   <- rgb(k_means$centers)
+#   }
+#   # show_col(final_palette)
+#   return(final_palette)
+# }
+```
+
+
+Kraabi üks värvipalett 17 populaarsema värviga, et selle peale mapida piltidelt riiete värvid.
+Tegelikult kasutan seda ainult värvi nimede jaoks ja tegelikud hex koodid tulevad teisest palettist.
+```{r}
+title <- read_html("http://clrs.cc/") %>% 
+  html_nodes(".db .title") %>% 
+  html_text() %>% 
+  str_squish() %>% 
+  str_to_lower()
+
+hex <- read_html("http://clrs.cc/") %>% 
+  html_nodes(".pal-ns code") %>% 
+  html_text() %>% 
+  c("#FFFFFF") %>% 
+  str_squish()
+
+rgb <- hex %>% 
+  col2rgb() %>% 
+  t() %>% 
+  as_tibble() %>% 
+  rename(r = red, g = green, b = blue) %>% 
+  mutate(rgb = str_c(r, g, b, sep = ", "))
+
+varvipalett <- tibble(title, hex) %>% 
+  bind_cols(rgb) %>% 
+  rowid_to_column()
+```
+
+Kraabi alternatiivne värvipalett rohkemate värvidega
+```{r}
+title_2 <- read_html("https://htmlcolorcodes.com/color-names/") %>% 
+  html_nodes(".color-name h4") %>% 
+  html_text()
+
+rgb_2 <- read_html("https://htmlcolorcodes.com/color-names/") %>% 
+  html_nodes(".color-rgb h4") %>% 
+  html_text()
+
+hex_2 <- read_html("https://htmlcolorcodes.com/color-names/") %>% 
+  html_nodes(".color-hex h4") %>% 
+  html_text()
+
+varvipalett_2_raw <- tibble(title_2, hex_2, rgb_2) %>%
+  rename(title = title_2, hex = hex_2, rgb = rgb_2) %>% 
+  mutate(rgb = str_replace_all(rgb, "rgb\\(|\\)", "")) %>% 
+  separate(rgb, sep = ",", into = c("r", "g", "b"), remove = FALSE) %>% 
+  mutate_at(.vars = c("r", "g", "b"), .funs = as.integer) %>% 
+  rowid_to_column()
+
+
+# kasuta samu värve, mis esialgses palettis, aga nende hex koodid on pisut teised
+# töötas paremini kui esilagne variant
+varvipalett_holdout <- varvipalett_2_raw %>% 
+  mutate(title_join = str_to_lower(title)) %>% 
+  inner_join(varvipalett %>% select(title), by = c("title_join" = "title")) %>% 
+  select(-title_join) %>% 
+  mutate_at(.vars = c("r", "g", "b"), as.integer) %>% 
+  rowid_to_column()
+# 
+# set.seed(15)
+# varvipalett_addition <- varvipalett_2_raw %>% 
+#   anti_join(varvipalett_holdout %>% select(title), by = "title") %>% 
+#   sample_n(13)
+# 
+# show_col(varvipalett_holdout$hex)
+# show_col(varvipalett$hex)
+# varvipalett_addition
+```
+
+
+Funktsioon, mis leiab pildilt top n domineerivamat värvi, mis vastavad etteantud värvipalettile.
+```{r}
+eralda_domineerivad_varvitoonid <- function(image_path, colors_to_map, no_of_colors = 2){
+  # lae pilt
+  pic <- readJPEG(image_path)
+  
+  #eralda pildilt rgb toonid iga pixli kohta
+  pic_rgb <- tibble(
+    r = as.vector(pic[,,1]),
+    g = as.vector(pic[,,2]),
+    b = as.vector(pic[,,3])
+  ) %>% 
+    rgb() %>%  # hex
+    col2rgb() %>%  # rgb
+    t() %>%  # transpose matrix
+    as.tibble() %>% 
+    rename(r = red, g = green, b = blue)
+  
+  # värvitoonide arv baas tabelis
+  k <- nrow(colors_to_map)
+  
+  # leia iagle värvile pildil talle lähib värvitoon baas värvipalettilt
+  # Õpetus siit: https://stackoverflow.com/questions/20621250/simple-approach-to-assigning-clusters-for-new-data-after-k-means-clustering
+  cluster <- FNN::get.knnx(colors_to_map %>% select(r, g, b), pic_rgb, k = k)
+
+  # lisa igale ennustatud klastrile juurde hex väärtus ja arvuta sagedustabel
+  tulemus <- cluster$nn.index[,1] %>%
+    as_tibble() %>% 
+    left_join(colors_to_map %>%
+                select(rowid, title, hex),
+            by = c("value" = "rowid")) %>% 
+    janitor::tabyl(hex, sort = TRUE) %>% 
+    head(no_of_colors) %>%
+    select(hex, percent)
+
+  return(tulemus)
+}
+
+# kui värvide määramisega on mingi viga, siis NULL, mitte error
+eralda_domineerivad_varvitoonid_possibly <- possibly(eralda_domineerivad_varvitoonid, NULL)
+```
+
+
+Funktsioon lõikab pildilt välja riietuse osa ja tuvastab sellelt domineerivad värvitoonid.
+```{r}
+riietuse_varvid <- function(url, chin_tip_x, chin_tip_y){
+  
+  # väljalõikamise piirkonna aluseks kasuta tuvastatud lõua asukohta pildil
+  position <- str_c("100x300", chin_tip_x - 50, chin_tip_y + 50, sep = "+")
+  pilt <- image_read(url)
+  
+  # lõika piltilt riietus
+  riietus <- image_crop(pilt, position)
+  
+  # salvesta ajutiselt maha vähendatud suurusega pilt
+  # selle pildi pealt tuvastan värvitoonid
+  image_write(image_scale(riietus, 50), "data/riietus.jpg")
+  
+  # tuvasta 2 domineerivat värvitooni
+  riiete_varvid_raw <- eralda_domineerivad_varvitoonid_possibly("data/riietus.jpg",
+                                                                varvipalett_holdout,
+                                                                2)
+  
+  # koosta data frame  
+  riiete_varvid <- tibble(pildi_url = url,
+                          chin_tip_x = chin_tip_x,
+                          chin_tip_y = chin_tip_y,
+                          color_hex_1 = riiete_varvid_raw$hex[1],
+                          color_percent_1 = riiete_varvid_raw$percent[1],
+                          color_hex_2 = riiete_varvid_raw$hex[2],
+                          color_percent_2 = riiete_varvid_raw$percent[2])
+  
+  return(riiete_varvid)
+  
+}
+
+# kui värvide tuvastamine ebaõnnestub, siis NULL, mitte error
+riietuse_varvid_possibly <- possibly(riietuse_varvid, NULL)
+```
+
+Leia igalt pildilt iga inimese kohta riietuse kaks peamist värvitooni.
+```{r}
+system.time(
+riiete_varv_piltidel_raw <- pmap_df(list(pildid_naod$pildi_url,
+                                         pildid_naod$chin_tip_x,
+                                         pildid_naod$chin_tip_y),
+                                         riietuse_varvid_possibly)
+)
+```
+
+Alternatiivne funktsioon, mis tuvastav 143 enamlevinuma värvitooni hulgast pildilt domineerivad värvitoonid.
+```{r}
+riietuse_varvid_143 <- function(url, chin_tip_x, chin_tip_y){
+  
+  # väljalõikamise piirkonna aluseks kasuta tuvastatud lõua asukohta pildil
+  position <- str_c("100x300", chin_tip_x - 50, chin_tip_y + 50, sep = "+")
+  pilt <- image_read(url)
+  
+  # lõika piltilt riietus
+  riietus <- image_crop(pilt, position)
+  
+  # salvesta ajutiselt maha vähendatud suurusega pilt
+  # selle pildi pealt tuvastan värvitoonid
+  image_write(image_scale(riietus, 50), "data/riietus.jpg")
+  
+  # tuvasta 2 domineerivat värvitooni
+  riiete_varvid_raw <- eralda_domineerivad_varvitoonid_possibly("data/riietus.jpg",
+                                                                varvipalett_2_raw,
+                                                                2)
+  
+  # koosta data frame  
+  riiete_varvid <- tibble(pildi_url = url,
+                          chin_tip_x = chin_tip_x,
+                          chin_tip_y = chin_tip_y,
+                          color_hex_1 = riiete_varvid_raw$hex[1],
+                          color_percent_1 = riiete_varvid_raw$percent[1],
+                          color_hex_2 = riiete_varvid_raw$hex[2],
+                          color_percent_2 = riiete_varvid_raw$percent[2])
+  
+  return(riiete_varvid)
+  
+}
+
+# kui värvide tuvastamine ebaõnnestub, siis NULL, mitte error
+riietuse_varvid_143_possibly <- possibly(riietuse_varvid_143, NULL)
+```
+
+Leia 143 värvitooni hulgast igalt pildilt domineerivad 2 värvitooni
+```{r}
+system.time(
+riiete_varv_piltidel_143_raw <- pmap_df(list(pildid_naod$pildi_url,
+                                         pildid_naod$chin_tip_x,
+                                         pildid_naod$chin_tip_y),
+                                         riietuse_varvid_143_possibly)
+)
+```
+
+Töötle värvi andmed tabelis.
+```{r}
+riiete_varv_piltidel_143 <- riiete_varv_piltidel_143_raw %>% 
+  left_join(varvipalett_2_raw %>% select(hex, color_title_143_1 = title),
+            by = c("color_hex_1" = "hex")) %>% 
+  left_join(varvipalett_2_raw %>% select(hex, color_title_143_2 = title),
+            by = c("color_hex_2" = "hex")) %>% 
+  rename(color_hex_143_1 = color_hex_1,
+         color_percent_143_1 = color_percent_1,
+         color_hex__143_2 = color_hex_2,
+         color_percent_143_2 = color_percent_2)
+```
+
+
+
+Piltidelt näolt tuvastatud info ja riiete värv ühte tabelisse kokku
+```{r}
+pildi_info <- pildid_naod %>% 
+  left_join(riiete_varv_piltidel_raw, by = c("pildi_url", "chin_tip_x", "chin_tip_y")) %>% 
+  filter(!is.na(color_hex_1)) %>% 
+  left_join(varvipalett_holdout %>% select(hex, color_title_1 = title),
+            by = c("color_hex_1" = "hex")) %>% 
+  left_join(riiete_varv_piltidel_143_raw, by = c("pildi_url", "chin_tip_x", "chin_tip_y"))
+```
+
+Salvesta andme, et neid visualiseerimisel ja exploratory analüüsis kasutada.
+```{r}
+save(pildi_info, varvipalett_holdout, varvipalett_2_raw,
+     file = "data/pildi_info.RData")
+```

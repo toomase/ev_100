@@ -1,0 +1,413 @@
+---
+title: "Exploratory analysis"
+output: html_notebook
+---
+
+Tutvu vastuvõtu galeriidest tuvastatud andmetega, et leida huvitavaid seoseid.
+
+Küsimused:
+  * Meeste ja naiste osakaal aastate lõikes
+  * Kas naine on mehe paremal või vasakul käel?
+  * Prillikandjate osakaal.
+
+Lae andmed
+```{r setup}
+library(tidyverse)
+library(hrbrthemes)
+library(patchwork)
+library(magick)
+library(ggjoy)
+
+load("data/pildi_info.RData")
+```
+
+# Tutvu andmetega ja täienda alusandmeid
+
+```{r}
+glimpse(pildi_info)
+```
+
+Töötle alusandmeid:
+  * lisa 2. värvi nimetus
+```{r}
+pildi_info_toodeldud <- pildi_info %>% 
+  left_join(varvipalett_holdout %>% select(hex, color_title_2 = title),
+            by = c("color_hex_2" = "hex"))
+```
+
+Üldine statistika
+```{r}
+pilte_kokku <- pildi_info_toodeldud %>% 
+  nrow()
+
+pilte_kokku
+```
+
+
+# Kuidas on muutunud meeste ja naiste riietuses värvieelistused?
+
+Valmista ette värvipalett
+```{r varvipalett}
+cols <- structure(as.character(varvipalett_holdout$hex), 
+                  names = as.character(varvipalett_holdout$title))
+```
+
+Valmista ette 143 värvist koosnev palett
+```{r varvipalett_143}
+cols_143 <- structure(as.character(varvipalett_2_raw$hex), 
+                  names = as.character(varvipalett_2_raw$title))
+```
+
+Milline on domineeriv riietuse värvitoon kõigi külaliste peale kokku?
+```{r}
+pildi_info_toodeldud %>%
+  ggplot(aes(x = aasta, y = ..count.., fill = fct_rev(fct_infreq(color_title_1)), 
+             colour = fct_rev(fct_infreq(color_title_1)))) +
+  geom_density(position = "fill") +
+  scale_fill_manual(values = cols) +
+  scale_colour_manual(values = cols) +
+  # kaota graafiku ümbere jääv tühi ruum ära (expand funktsioon) 
+  scale_y_continuous(labels = scales::percent, expand = c(0, 0)) +
+  scale_x_continuous(expand = c(0, 0)) +
+  labs(title = "Riiete domineeriv värvitoon",
+       subtitle = "Vabariiga aastapäeva vastuvõtt 2013-2018\nMehed ja naised kokku",
+       caption = "ERR ja Õhtuleht galeriide põhjal") +
+  theme_ipsum_rc() +
+  theme(axis.title = element_blank(),
+        legend.position = "none")
+```
+
+Milline on naiste domineeriv riietuse värvitoon?
+```{r, fig.width=11}
+naised_koik_varvid <- pildi_info_toodeldud %>%
+  filter(gender_type == "F") %>% 
+  ggplot(aes(x = aasta, y = ..count.., fill = fct_rev(fct_infreq(color_title_1)), 
+             colour = fct_rev(fct_infreq(color_title_1)))) +
+  geom_density(position = "fill") +
+  scale_fill_manual(values = cols) +
+  scale_colour_manual(values = cols) +
+  # kaota graafiku ümbere jääv tühi ruum ära (expand funktsioon) 
+  scale_y_continuous(labels = scales::percent, expand = c(0, 0)) +
+  scale_x_continuous(expand = c(0, 0)) +
+  labs(title = "Naiste kleitide domineeriv värvitoon",
+       subtitle = "Kõik värvitoonid kokku") +
+  theme_ipsum_rc() +
+  theme(axis.title = element_blank(),
+        legend.position = "none")
+
+naised_ilma_mustata <- pildi_info_toodeldud %>%
+  filter(gender_type == "F",
+         color_title_1 != "Black") %>% 
+  ggplot(aes(x = aasta, y = ..count.., fill = fct_rev(fct_infreq(color_title_1)), 
+             colour = fct_rev(fct_infreq(color_title_1)))) +
+  geom_density(position = "fill") +
+  scale_fill_manual(values = cols) +
+  scale_colour_manual(values = cols) +
+  # kaota graafiku ümbere jääv tühi ruum ära (expand funktsioon) 
+  scale_y_continuous(labels = scales::percent, expand = c(0, 0)) +
+  scale_x_continuous(expand = c(0, 0.1)) +
+  labs(title = "",
+       subtitle = "Ilma mustata") +
+  theme_ipsum_rc() +
+  theme(axis.title = element_blank(),
+        legend.position = "none")
+
+naised_koik_varvid + naised_ilma_mustata
+```
+
+Milline on meeste domineeriv riietuse värvitoon?
+```{r, fig.width=11}
+mehed_koik_varvid <- pildi_info_toodeldud %>%
+  filter(gender_type == "M") %>% 
+  ggplot(aes(x = aasta, y = ..count.., fill = fct_rev(fct_infreq(color_title_1)), 
+             colour = fct_rev(fct_infreq(color_title_1)))) +
+  geom_density(position = "fill") +
+  scale_fill_manual(values = cols) +
+  scale_colour_manual(values = cols) +
+  # kaota graafiku ümbere jääv tühi ruum ära (expand funktsioon) 
+  scale_y_continuous(labels = scales::percent, expand = c(0, 0)) +
+  scale_x_continuous(expand = c(0, 0)) +
+  labs(title = "Meeste riiete domineeriv värvitoon",
+       subtitle = "Kõik värvitoonid kokku") +
+  theme_ipsum_rc() +
+  theme(axis.title = element_blank(),
+        legend.position = "none")
+
+mehed_ilma_mustata <- pildi_info_toodeldud %>%
+  filter(gender_type == "M",
+         color_title_1 != "Black") %>% 
+  ggplot(aes(x = aasta, y = ..count.., fill = fct_rev(fct_infreq(color_title_1)), 
+             colour = fct_rev(fct_infreq(color_title_1)))) +
+  geom_density(position = "fill") +
+  scale_fill_manual(values = cols) +
+  scale_colour_manual(values = cols) +
+  # kaota graafiku ümbere jääv tühi ruum ära (expand funktsioon) 
+  scale_y_continuous(labels = scales::percent, expand = c(0, 0)) +
+  scale_x_continuous(expand = c(0, 0.1)) +
+  labs(title = "",
+       subtitle = "Ilma mustata") +
+  theme_ipsum_rc() +
+  theme(axis.title = element_blank(),
+        legend.position = "none")
+
+mehed_koik_varvid + mehed_ilma_mustata
+```
+
+Tähelepanekud:
+  * Meestel 2015 erakordselt palju halle riideid.
+    + Tundub, et tumehalle ülikondasid on tõesti pisut rohkem, aga ka pildistamisel kasutatud valgus pisut moonutab värvitooni.
+  * Tumesinine kogub meestel polulaarsust.
+  
+
+Milline on 2. domineeriv värv riietuses?  
+```{r}
+pildi_info_toodeldud %>%
+  ggplot(aes(x = aasta, y = ..count.., fill = fct_rev(fct_infreq(color_title_2)), 
+             colour = fct_rev(fct_infreq(color_title_2)))) +
+  geom_density(position = "fill") +
+  scale_fill_manual(values = cols) +
+  scale_colour_manual(values = cols) +
+  # kaota graafiku ümbere jääv tühi ruum ära (expand funktsioon) 
+  scale_y_continuous(labels = scales::percent, expand = c(0, 0)) +
+  scale_x_continuous(expand = c(0, 0)) +
+  labs(title = "Riiete teine domineeriv värvitoon",
+       subtitle = "Mehed ja naised kokku") +
+  theme_ipsum_rc() +
+  theme(axis.title = element_blank(),
+        legend.position = "none")
+```
+
+
+Milline on naiste teine domineeriv riietuse värvitoon?
+```{r}
+pildi_info_toodeldud %>%
+  filter(gender_type == "F") %>% 
+  ggplot(aes(x = aasta, y = ..count.., fill = fct_rev(fct_infreq(color_title_2)), 
+             colour = fct_rev(fct_infreq(color_title_2)))) +
+  geom_density(position = "fill") +
+  scale_fill_manual(values = cols) +
+  scale_colour_manual(values = cols) +
+  # kaota graafiku ümbere jääv tühi ruum ära (expand funktsioon) 
+  scale_y_continuous(labels = scales::percent, expand = c(0, 0)) +
+  scale_x_continuous(expand = c(0, 0)) +
+  labs(title = "Naiste kleitide teine domineeriv värvitoon",
+       subtitle = "Kõik värvitoonid kokku") +
+  theme_ipsum_rc() +
+  theme(axis.title = element_blank(),
+        legend.position = "none")
+```  
+
+Milline on meeste teine domineeriv riietuse värvitoon?
+```{r}
+pildi_info_toodeldud %>%
+  filter(gender_type == "M") %>% 
+  ggplot(aes(x = aasta, y = ..count.., fill = fct_rev(fct_infreq(color_title_2)), 
+             colour = fct_rev(fct_infreq(color_title_2)))) +
+  geom_density(position = "fill") +
+  scale_fill_manual(values = cols) +
+  scale_colour_manual(values = cols) +
+  # kaota graafiku ümbere jääv tühi ruum ära (expand funktsioon) 
+  scale_y_continuous(labels = scales::percent, expand = c(0, 0)) +
+  scale_x_continuous(expand = c(0, 0)) +
+  labs(title = "Meeste riiete teine domineeriv värvitoon",
+       subtitle = "Kõik värvitoonid kokku") +
+  theme_ipsum_rc() +
+  theme(axis.title = element_blank(),
+        legend.position = "none")
+```
+
+# Tutvu konkreetsete piltidega, et analüüsi tulemusi valideerida.
+
+Kuva värvide jaotus vastavalt valitud tingimustele.
+```{r}
+pildi_info %>% 
+  filter(gender_type == "M",
+         aasta == 2018) %>% 
+  count(color_title_1)
+```
+
+Kuva tinimustele vastavad random pildid.
+```{r}
+pildi_info %>% 
+  filter(gender_type == "M",
+         aasta == 2018,
+         color_title_1 == "Teal") %>% 
+  sample_n(1) %>% 
+  pull(pildi_url) %>% 
+  image_read(.) %>% 
+  image_scale(., 600)
+```
+
+# Analüüsi erinevaid tunnuseid külaliste kohta.
+
+Milline on külaliste vanuseline jaotus aastate lõikes?
+```{r}
+pildi_info_toodeldud %>% 
+  ggplot(aes(age, as.factor(aasta))) +
+  geom_joy(aes(fill = as.factor(aasta)), scale = 2, colour = "white", size = 0.7) +
+  theme_ipsum_rc() +
+  scale_y_discrete(expand = c(0.01, 0)) +
+  scale_x_continuous(breaks = seq(20, 70, by = 10),
+                     limits = c(20, 70),
+                     expand = c(0, 0)) +
+  scale_fill_cyclical(values = c("#3182bd", "#6baed6")) +
+  labs(x = "vanus",
+       y = "aasta",
+       title = "Milline on külaliste vanus?",
+       subtitle = "Jaotus aastate lõikes")
+```
+
+Milline on külaliste vanuseline jaotus aastate lõikes?
+```{r, fig.width = 10}
+meeste_vanus  <- pildi_info_toodeldud %>% 
+  filter(gender_type == "M") %>% 
+  ggplot(aes(age, as.factor(aasta))) +
+  geom_joy(aes(fill = as.factor(aasta)), scale = 2, colour = "white", size = 0.7) +
+  theme_ipsum_rc() +
+  scale_y_discrete(expand = c(0.01, 0)) +
+  scale_x_continuous(breaks = seq(20, 70, by = 10),
+                     limits = c(20, 70),
+                     expand = c(0, 0)) +
+  scale_fill_cyclical(values = c("#3182bd", "#6baed6")) +
+  labs(x = "vanus",
+       y = "aasta",
+       title = "Milline on külaliste vanus?",
+       subtitle = "Mehed")
+
+
+naiste_vanus  <- pildi_info_toodeldud %>% 
+  filter(gender_type == "F") %>% 
+  ggplot(aes(age, as.factor(aasta))) +
+  geom_joy(aes(fill = as.factor(aasta)), scale = 2, colour = "white", size = 0.7) +
+  theme_ipsum_rc() +
+  scale_y_discrete(expand = c(0.01, 0)) +
+  scale_x_continuous(breaks = seq(20, 70, by = 10),
+                     limits = c(20, 70),
+                     expand = c(0, 0)) +
+  scale_fill_cyclical(values = c("#3182bd", "#6baed6")) +
+  labs(x = "vanus",
+       y = "aasta",
+       title = "",
+       subtitle = "Naised")
+
+meeste_vanus + naiste_vanus
+```
+
+# Kasuta 143 värvist koosnevat paletti, et tuvastada domineerivad värvitoonid
+
+Milline on teine domineeriv värvitoon riietel. Mehed ja naised kokku
+Kasuta visualiseerimiseks jitter_plot'i
+```{r}
+pildi_info_toodeldud %>% 
+  # filter(gender_type == "F",
+  #        color_title_1 != "Black") %>% 
+  left_join(varvipalett_holdout %>% select(title, rowid), by = c("color_title_2" = "title")) %>% 
+  count(aasta, rowid, color_title_2) %>% 
+  ggplot(aes(as.factor(aasta), rowid, color = color_title_2)) +
+  geom_jitter(aes(size = n)) +
+  scale_colour_manual(values = cols) +
+  theme_ipsum_rc() +
+  labs(title = "Riiete teine domineeriv värvitoon",
+       subtitle = "Vabariiga aastapäeva vastuvõtt 2013-2018\nMehed ja naised kokku",
+       caption = "ERR ja Õhtuleht galeriide põhjal") +
+  theme(axis.title = element_blank(),
+        axis.text.y = element_blank(),
+        legend.position = "none",
+        panel.grid = element_blank())
+
+```
+
+Millised on domineerivad värvitoonid naistel ilma mustata? Kasuta suuremat värvipaletti.
+```{r}
+pildi_info_toodeldud %>% 
+  filter(gender_type == "F",
+         color_title_1 != "Black") %>%
+  left_join(varvipalett_2_raw %>% select(title, rowid), by = c("color_title_143_1" = "title")) %>% 
+  count(aasta, rowid, color_title_143_1) %>% 
+  ggplot(aes(as.factor(aasta), rowid, color = color_title_143_1)) +
+  geom_jitter(aes(size = n)) +
+  scale_size_continuous(range = c(1, 20)) +
+  scale_colour_manual(values = cols_143) +
+  theme_ipsum_rc() +
+  labs(title = "Naiste riiete domineeriv värvitoon",
+       subtitle = "Mulli suurus iseloomustab värvitooni esinemissagedust vastaval aastal\nVälistatud on must värv") +
+  theme(axis.title = element_blank(),
+        axis.text.y = element_blank(),
+        legend.position = "none",
+        panel.grid = element_blank())
+```
+
+
+# Milline on meeste ja naiste osakaal aastate lõikes?
+
+```{r}
+pildi_info_toodeldud %>% 
+  count(aasta, gender_type) %>% 
+  ungroup() %>% 
+  group_by(aasta) %>% 
+  mutate(percentage = n / sum(n),
+         naiste_osakaal_label = ifelse(gender_type == "F", str_c(round(percentage, 2) * 100, "%"), 
+                                 ""),
+         naiste_osakaal = ifelse(gender_type == "F", percentage, "")) %>% 
+  mutate(naine = ifelse(gender_type == "F", 1, 0)) %>% 
+  ggplot(aes(aasta, y = percentage, fill = gender_type)) + 
+  geom_bar(position = "fill", stat = "identity") +
+  geom_text(aes(label = naiste_osakaal_label, y = percentage - 0.05), size = 4) +
+  annotate("text", y = 0.1, x = 2018.8, label = "naised", colour = "#fc9272", fontface = "bold") +
+  annotate("text", y = 0.9, x = 2018.8, label = "mehed", colour = "#2b8cbe", fontface = "bold") +
+  coord_flip() +
+  theme_ipsum_rc() +
+  scale_y_continuous(labels = percent_format(),
+                     expand = c(0, 0)) +
+  scale_x_continuous(breaks = seq(2013, 2018, by = 1)) +
+  # expand_limits(x = c(nimekirju + 2, 0)) +
+  geom_hline(yintercept =  0.5) +
+  scale_fill_manual(values = c("#fc9272", "#2b8cbe")) +
+  labs(title = "Külaliste sooline jaotus",
+       x = "aasta") +
+  theme(axis.title.x = element_blank()) +
+  guides(fill = FALSE)
+```
+
+
+# Kummal pool on naine?
+
+Ainule need pildid, kus on 2 inimest, mees ja naine.
+Kui pildil on mees ja naine, siis kummal pool on aastate lõikes mees?
+```{r}
+pildi_info %>% 
+  mutate(female = ifelse(gender_type == "F", 1, 0)) %>% 
+  group_by(pildi_url) %>% 
+  filter(max(face_id) == 2, sum(female) == 1) %>% 
+  group_by(pildi_url) %>% 
+  mutate(kummal_pool = ifelse(chin_tip_x < max(chin_tip_x), "parem", "vasak")) %>% 
+  ungroup() %>% 
+  filter(gender_type == "M") %>% 
+  count(aasta, kummal_pool) %>% 
+  ungroup() %>% 
+  group_by(aasta) %>% 
+  mutate(percentage = n / sum(n),
+         vasakul_osakaal_label = ifelse(kummal_pool == "vasak", str_c(round(percentage, 2) * 100, "%"), 
+                                 ""),
+         vasakul_osakaal = ifelse(kummal_pool == "vasak", percentage, "")) %>% 
+  arrange(aasta, desc(kummal_pool)) %>% 
+  ggplot(aes(aasta, y = percentage, fill = fct_rev(kummal_pool))) + 
+  geom_bar(position = "fill", stat = "identity") +
+  geom_text(aes(label = vasakul_osakaal_label, y = percentage - 0.05), size = 4) +
+  annotate("text", y = 0.1, x = 2018.8, label = "vasakul", colour = "#fc9272", fontface = "bold") +
+  annotate("text", y = 0.9, x = 2018.8, label = "paremal", colour = "#2b8cbe", fontface = "bold") +
+  coord_flip() +
+  theme_ipsum_rc() +
+  scale_y_continuous(labels = percent_format(),
+                     expand = c(0, 0)) +
+  scale_x_continuous(breaks = seq(2013, 2018, by = 1)) +
+  # expand_limits(x = c(nimekirju + 2, 0)) +
+  geom_hline(yintercept =  0.5) +
+  scale_fill_manual(values = c("#fc9272", "#2b8cbe")) +
+  labs(title = "Mehe asukoht pildil",
+       subtitle = "Kui korraga on pildil mees ja naine",
+       x = "aasta") +
+  theme(axis.title.x = element_blank()) +
+  guides(fill = FALSE)
+```
+
